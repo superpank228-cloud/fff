@@ -29,7 +29,7 @@ if not BOT_TOKEN:
 PRIVATE_CHANNEL_ID = -1003336905435
 ADMIN_CHANNEL_ID = -1003109975028
 
-TARIFF_NAME = "PrivatForFap🍑(навсегда)"
+TARIFF_NAME = "🍑PrivatForFap🍑(навсегда)"
 PRICE = "200 ₽"
 
 DB_FILE = "subscriptions.db"
@@ -39,44 +39,42 @@ DB_FILE = "subscriptions.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
-    cur.execute(
-        """
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS subscriptions (
             user_id INTEGER PRIMARY KEY,
+            tariff_name TEXT,
             expire_date TEXT
         )
-        """
-    )
+    """)
     conn.commit()
     conn.close()
 
 
-def set_subscription(user_id: int):
+def set_subscription(user_id: int, tariff_name: str):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
-    # expire_date = NULL → подписка навсегда
-    cur.execute(
-        "INSERT OR REPLACE INTO subscriptions(user_id, tariff_name, expire_date)
- VALUES (?, ?)",
-        (user_id, None)
-    )
+    cur.execute("""
+        INSERT OR REPLACE INTO subscriptions
+        (user_id, tariff_name, expire_date)
+        VALUES (?, ?, ?)
+    """, (user_id, tariff_name, None))
     conn.commit()
     conn.close()
 
 
-def has_subscription(user_id: int) -> bool:
+def get_subscription(user_id: int):
     conn = sqlite3.connect(DB_FILE)
     cur = conn.cursor()
     cur.execute(
-        "SELECT 1 FROM subscriptions WHERE user_id = ?",
+        "SELECT tariff_name, expire_date FROM subscriptions WHERE user_id = ?",
         (user_id,)
     )
     row = cur.fetchone()
     conn.close()
-    return row is not None
+    return row
 
 
-# ================= КНОПКИ МЕНЮ =================
+# ================= КНОПКИ =================
 
 def main_menu():
     return ReplyKeyboardMarkup(
@@ -94,7 +92,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ================= ТЕКСТОВОЕ МЕНЮ =================
+# ================= МЕНЮ =================
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -107,16 +105,20 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [
                     InlineKeyboardButton(
                         f"🍑 {TARIFF_NAME} — {PRICE}",
-                        callback_data="buy"
+                        callback_data="buy_privat"
                     )
                 ]
             ])
         )
 
     elif text == "📊 Подписка":
-        if has_subscription(user_id):
+        sub = get_subscription(user_id)
+
+        if sub:
+            tariff, expire = sub
             await update.message.reply_text(
                 "📊 Информация о подписке\n\n"
+                f"📦 Тариф: {tariff}\n"
                 "♾ Подписка активна навсегда"
             )
         else:
@@ -126,35 +128,24 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
 
-# ================= INLINE CALLBACKS =================
+# ================= CALLBACKS =================
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user = query.from_user
 
-    if query.data == "buy":
+    if query.data == "buy_privat":
         await query.message.reply_text(
             f"📦 Тариф: {TARIFF_NAME}\n"
             f"💰 Цена: {PRICE}\n\n"
-            "Выбери способ оплаты:",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💳 СБП (200 ₽)", callback_data="sbp")]
-            ])
-        )
-
-    elif query.data == "sbp":
-        await query.message.reply_text(
-            "💳 Оплата по СБП\n\n"
-            "Переведи 200 ₽ по реквизитам:\n"
-            "👉 ТУТ ТВОИ РЕКВИЗИТЫ\n\n"
             "После оплаты нажми кнопку ниже 👇",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("⏳ Я оплатил", callback_data="wait")]
+                [InlineKeyboardButton("💳 Я оплатил", callback_data="wait_privat")]
             ])
         )
 
-    elif query.data == "wait":
+    elif query.data == "wait_privat":
         time_str = datetime.now().strftime("%d.%m.%Y %H:%M")
 
         await context.bot.send_message(
@@ -168,7 +159,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [
                     InlineKeyboardButton(
                         "✅ Подтвердить оплату",
-                        callback_data=f"approve_{user.id}"
+                        callback_data=f"approve_privat_{user.id}"
                     )
                 ]
             ])
@@ -179,11 +170,10 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_menu()
         )
 
-    elif query.data.startswith("approve_"):
-        user_id = int(query.data.split("_")[1])
+    elif query.data.startswith("approve_privat_"):
+        user_id = int(query.data.split("_")[-1])
 
-        # сохраняем подписку
-        set_subscription(user_id)
+        set_subscription(user_id, TARIFF_NAME)
 
         link = await context.bot.create_chat_invite_link(
             chat_id=PRIVATE_CHANNEL_ID,
@@ -193,6 +183,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(
             user_id,
             "🎉 Оплата подтверждена!\n\n"
+            f"📦 Тариф: {TARIFF_NAME}\n"
             "♾ Подписка активна навсегда\n\n"
             f"🔗 Ссылка для входа:\n{link.invite_link}"
         )
