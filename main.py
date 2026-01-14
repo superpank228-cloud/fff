@@ -3,6 +3,7 @@
 import os
 import sqlite3
 from datetime import datetime
+
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -23,7 +24,7 @@ from telegram.ext import (
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN не найден")
+    raise RuntimeError("BOT_TOKEN не задан")
 
 PRIVATE_CHANNEL_ID = -1003336905435
 ADMIN_CHANNEL_ID = -1003109975028
@@ -37,23 +38,26 @@ DB_FILE = "subscriptions.db"
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
+    cur = conn.cursor()
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS subscriptions (
             user_id INTEGER PRIMARY KEY,
             expire_date TEXT
         )
-    """)
+        """
+    )
     conn.commit()
     conn.close()
 
 
 def set_subscription(user_id: int):
     conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute(
+    cur = conn.cursor()
+    # expire_date = NULL → подписка навсегда
+    cur.execute(
         "INSERT OR REPLACE INTO subscriptions (user_id, expire_date) VALUES (?, ?)",
-        (user_id, None)  # None = навсегда
+        (user_id, None)
     )
     conn.commit()
     conn.close()
@@ -61,17 +65,17 @@ def set_subscription(user_id: int):
 
 def has_subscription(user_id: int) -> bool:
     conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute(
+    cur = conn.cursor()
+    cur.execute(
         "SELECT 1 FROM subscriptions WHERE user_id = ?",
         (user_id,)
     )
-    result = cursor.fetchone()
+    row = cur.fetchone()
     conn.close()
-    return result is not None
+    return row is not None
 
 
-# ================= UI =================
+# ================= КНОПКИ МЕНЮ =================
 
 def main_menu():
     return ReplyKeyboardMarkup(
@@ -89,7 +93,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ================= МЕНЮ =================
+# ================= ТЕКСТОВОЕ МЕНЮ =================
 
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
@@ -99,29 +103,29 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "📦 Доступные тарифы:",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    f"🍑 {TARIFF_NAME} — {PRICE}",
-                    callback_data="buy"
-                )]
+                [
+                    InlineKeyboardButton(
+                        f"🍑 {TARIFF_NAME} — {PRICE}",
+                        callback_data="buy"
+                    )
+                ]
             ])
         )
 
     elif text == "📊 Подписка":
         if has_subscription(user_id):
-            msg = (
+            await update.message.reply_text(
                 "📊 Информация о подписке\n\n"
                 "♾ Подписка активна навсегда"
             )
         else:
-            msg = (
+            await update.message.reply_text(
                 "📊 Информация о подписке\n\n"
-                "❌ У тебя нет активной подписки."
+                "❌ У тебя нет активной подписки"
             )
 
-        await update.message.reply_text(msg)
 
-
-# ================= CALLBACKS =================
+# ================= INLINE CALLBACKS =================
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -150,20 +154,22 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif query.data == "wait":
-        time = datetime.now().strftime("%d.%m.%Y %H:%M")
+        time_str = datetime.now().strftime("%d.%m.%Y %H:%M")
 
         await context.bot.send_message(
             ADMIN_CHANNEL_ID,
-            f"💸 Заявка на оплату\n\n"
+            "💸 Заявка на оплату\n\n"
             f"👤 @{user.username or 'без username'}\n"
             f"🆔 ID: {user.id}\n"
             f"📦 Тариф: {TARIFF_NAME} (навсегда)\n"
-            f"🕒 Время: {time}",
+            f"🕒 Время: {time_str}",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton(
-                    "✅ Подтвердить оплату",
-                    callback_data=f"approve_{user.id}"
-                )]
+                [
+                    InlineKeyboardButton(
+                        "✅ Подтвердить оплату",
+                        callback_data=f"approve_{user.id}"
+                    )
+                ]
             ])
         )
 
@@ -209,4 +215,5 @@ def main():
     app.run_polling()
 
 
-if __name__
+if __name__ == "__main__":
+    main()
