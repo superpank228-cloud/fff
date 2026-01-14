@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -18,6 +18,8 @@ from telegram.ext import (
     filters
 )
 
+# ================= НАСТРОЙКИ =================
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не найден")
@@ -25,12 +27,17 @@ if not BOT_TOKEN:
 PRIVATE_CHANNEL_ID = -1003336905435
 ADMIN_CHANNEL_ID = -1003109975028
 
-TARIFF_NAME = "PrivatForFap🍑"
+TARIFF_NAME = "PrivatForFap🍑(навесегда)"
 PRICE = "200 ₽"
-SUBSCRIPTION_DAYS = "∞"
 
-PENDING_PAYMENTS = {}
-SUBSCRIPTIONS = {}  # user_id -> expire_date
+# ♾ None = вечная подписка
+SUBSCRIPTION_DAYS = None
+
+# временное хранилище
+PENDING_PAYMENTS = {}     # user_id -> True
+SUBSCRIPTIONS = {}        # user_id -> None (вечная) или datetime
+
+# =================================================
 
 
 def get_main_menu():
@@ -40,40 +47,65 @@ def get_main_menu():
     )
 
 
+# ================= /start =================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Добро пожаловать!\n\nВыбери пункт меню 👇",
+        "👋 Добро пожаловать!\n\n"
+        "Выбери пункт меню 👇",
         reply_markup=get_main_menu()
     )
 
 
+# ============ REPLY-кнопки (плашки) ============
+
 async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     text = update.message.text
+    now = datetime.now()
 
     if text == "🛒 Тарифы":
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"🍑 {TARIFF_NAME} — {PRICE}", callback_data="buy")]
+            [InlineKeyboardButton(
+                f"🍑 {TARIFF_NAME} — {PRICE}",
+                callback_data="buy"
+            )]
         ])
-        await update.message.reply_text("📦 Доступные тарифы:", reply_markup=keyboard)
+
+        await update.message.reply_text(
+            "📦 Доступные тарифы:",
+            reply_markup=keyboard
+        )
 
     elif text == "📊 Подписка":
-        now = datetime.now()
-        expire = SUBSCRIPTIONS.get(user_id)
+        if user_id in SUBSCRIPTIONS:
+            expire = SUBSCRIPTIONS[user_id]
 
-        if expire and expire > now:
-            await update.message.reply_text(
-                "📊 *Информация о подписке*\n\n"
-                f"✅ Активна до: *{expire.strftime('%d.%m.%Y %H:%M')}*",
-                parse_mode="Markdown"
-            )
+            if expire is None:
+                msg = (
+                    "📊 *Информация о подписке*\n\n"
+                    "♾ Подписка активна *навсегда*"
+                )
+            elif expire > now:
+                msg = (
+                    "📊 *Информация о подписке*\n\n"
+                    f"✅ Активна до: *{expire.strftime('%d.%m.%Y %H:%M')}*"
+                )
+            else:
+                msg = (
+                    "📊 *Информация о подписке*\n\n"
+                    "❌ Подписка истекла"
+                )
         else:
-            await update.message.reply_text(
+            msg = (
                 "📊 *Информация о подписке*\n\n"
-                "❌ У тебя нет активной подписки.",
-                parse_mode="Markdown"
+                "❌ У тебя нет активной подписки."
             )
 
+        await update.message.reply_text(msg, parse_mode="Markdown")
+
+
+# ============ INLINE-кнопки (покупка) ============
 
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -84,8 +116,11 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("💳 СБП (200 ₽)", callback_data="sbp")]
         ])
+
         await query.message.reply_text(
-            f"📦 Тариф: {TARIFF_NAME}\n💰 Цена: {PRICE}\n\nВыбери способ оплаты:",
+            f"📦 Тариф: {TARIFF_NAME}\n"
+            f"💰 Цена: {PRICE}\n\n"
+            "Выбери способ оплаты:",
             reply_markup=keyboard
         )
 
@@ -93,6 +128,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("⏳ Я оплатил", callback_data="wait")]
         ])
+
         await query.message.reply_text(
             "💳 *Оплата по СБП*\n\n"
             "Переведи *200 ₽* по реквизитам:\n"
@@ -107,7 +143,10 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         time = datetime.now().strftime("%d.%m.%Y %H:%M")
 
         admin_keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Подтвердить оплату", callback_data=f"approve_{user.id}")]
+            [InlineKeyboardButton(
+                "✅ Подтвердить оплату",
+                callback_data=f"approve_{user.id}"
+            )]
         ])
 
         await context.bot.send_message(
@@ -121,7 +160,10 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-        await query.message.reply_text("⏳ Заявка отправлена. Ожидай подтверждения.")
+        await query.message.reply_text(
+            "⏳ Заявка отправлена.\nОжидай подтверждения администратора.",
+            reply_markup=get_main_menu()
+        )
 
     elif query.data.startswith("approve_"):
         user_id = int(query.data.split("_")[1])
@@ -130,8 +172,8 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("❌ Заявка уже обработана")
             return
 
-        expire_date = datetime.now() + timedelta(days=SUBSCRIPTION_DAYS)
-        SUBSCRIPTIONS[user_id] = expire_date
+        # ♾ Вечная подписка
+        SUBSCRIPTIONS[user_id] = None
         del PENDING_PAYMENTS[user_id]
 
         link = await context.bot.create_chat_invite_link(
@@ -142,19 +184,25 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(
             user_id,
             "🎉 *Оплата подтверждена!*\n\n"
-            f"✅ Подписка активна до: *{expire_date.strftime('%d.%m.%Y %H:%M')}*\n\n"
+            "♾ Подписка активна *навсегда*\n\n"
             f"🔗 Ссылка для входа:\n{link.invite_link}",
             parse_mode="Markdown"
         )
 
-        await query.message.edit_text("✅ Оплата подтверждена\nПодписка активирована")
+        await query.message.edit_text(
+            "✅ Оплата подтверждена\n♾ Подписка активирована"
+        )
 
+
+# ================= ЗАПУСК =================
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_handler))
+
     app.run_polling()
 
 
