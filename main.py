@@ -27,7 +27,7 @@ ADMIN_CHANNEL_ID = -1003109975028
 
 TARIFF_NAME = "PrivatForFap🍑"
 PRICE = "200 ₽"
-SUBSCRIPTION_DAYS = ∞
+SUBSCRIPTION_DAYS = "∞"
 
 PENDING_PAYMENTS = {}
 SUBSCRIPTIONS = {}  # user_id -> expire_date
