@@ -28,13 +28,10 @@ if not BOT_TOKEN:
 PRIVATE_CHANNEL_ID = -1003336905435
 ADMIN_CHANNEL_ID = -1003109975028
 
-TARIFF_NAME = "PrivatForFap🍑(навсегда)"
+TARIFF_NAME = "PrivatForFap🍑"
 PRICE = "200 ₽"
 
 DB_FILE = "subscriptions.db"
-
-# =================================================
-
 
 # ================= БАЗА ДАННЫХ =================
 
@@ -54,25 +51,24 @@ def init_db():
 def set_subscription(user_id: int):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    # expire_date = NULL → вечная подписка
     cursor.execute(
         "INSERT OR REPLACE INTO subscriptions (user_id, expire_date) VALUES (?, ?)",
-        (user_id, None)
+        (user_id, None)  # None = навсегда
     )
     conn.commit()
     conn.close()
 
 
-def get_subscription(user_id: int):
+def has_subscription(user_id: int) -> bool:
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT expire_date FROM subscriptions WHERE user_id = ?",
+        "SELECT 1 FROM subscriptions WHERE user_id = ?",
         (user_id,)
     )
-    row = cursor.fetchone()
+    result = cursor.fetchone()
     conn.close()
-    return row[0] if row else None
+    return result is not None
 
 
 # ================= UI =================
@@ -111,20 +107,18 @@ async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif text == "📊 Подписка":
-        expire = get_subscription(user_id)
-
-        if expire is not None:
+        if has_subscription(user_id):
             msg = (
-                "📊 *Информация о подписке*\n\n"
-                "♾ Подписка активна *навсегда*"
+                "📊 Информация о подписке\n\n"
+                "♾ Подписка активна навсегда"
             )
         else:
             msg = (
-                "📊 *Информация о подписке*\n\n"
+                "📊 Информация о подписке\n\n"
                 "❌ У тебя нет активной подписки."
             )
 
-        await update.message.reply_text(msg, parse_mode="Markdown")
+        await update.message.reply_text(msg)
 
 
 # ================= CALLBACKS =================
@@ -146,14 +140,13 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == "sbp":
         await query.message.reply_text(
-            "💳 *Оплата по СБП*\n\n"
-            "Переведи *200 ₽* по реквизитам:\n"
+            "💳 Оплата по СБП\n\n"
+            "Переведи 200 ₽ по реквизитам:\n"
             "👉 ТУТ ТВОИ РЕКВИЗИТЫ\n\n"
-            "После оплаты нажми кнопку 👇",
+            "После оплаты нажми кнопку ниже 👇",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("⏳ Я оплатил", callback_data="wait")]
-            ]),
-            parse_mode="Markdown"
+            ])
         )
 
     elif query.data == "wait":
@@ -161,18 +154,17 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             ADMIN_CHANNEL_ID,
-            "💸 *Заявка на оплату*\n\n"
+            f"💸 Заявка на оплату\n\n"
             f"👤 @{user.username or 'без username'}\n"
             f"🆔 ID: {user.id}\n"
-            f"📦 Тариф: {TARIFF_NAME}\n"
+            f"📦 Тариф: {TARIFF_NAME} (навсегда)\n"
             f"🕒 Время: {time}",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton(
                     "✅ Подтвердить оплату",
                     callback_data=f"approve_{user.id}"
                 )]
-            ]),
-            parse_mode="Markdown"
+            ])
         )
 
         await query.message.reply_text(
@@ -183,7 +175,7 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data.startswith("approve_"):
         user_id = int(query.data.split("_")[1])
 
-        # сохраняем подписку в SQLite
+        # сохраняем подписку
         set_subscription(user_id)
 
         link = await context.bot.create_chat_invite_link(
@@ -193,10 +185,9 @@ async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             user_id,
-            "🎉 *Оплата подтверждена!*\n\n"
-            "♾ Подписка активна *навсегда*\n\n"
-            f"🔗 Ссылка для входа:\n{link.invite_link}",
-            parse_mode="Markdown"
+            "🎉 Оплата подтверждена!\n\n"
+            "♾ Подписка активна навсегда\n\n"
+            f"🔗 Ссылка для входа:\n{link.invite_link}"
         )
 
         await query.message.edit_text(
@@ -218,5 +209,4 @@ def main():
     app.run_polling()
 
 
-if __name__ == "__main__":
-    main()
+if __name__
