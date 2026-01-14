@@ -29,7 +29,7 @@ if not BOT_TOKEN:
 PRIVATE_CHANNEL_ID = -1003336905435
 ADMIN_CHANNEL_ID = -1003109975028
 
-TARIFF_NAME = "🍑PrivatForFap🍑(навсегда)"
+TARIFF_NAME = "PrivatForFap(навсегда)"
 PRICE = "200 ₽"
 
 DB_FILE = "subscriptions.db"
