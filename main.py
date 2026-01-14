@@ -56,7 +56,8 @@ def set_subscription(user_id: int):
     cur = conn.cursor()
     # expire_date = NULL → подписка навсегда
     cur.execute(
-        "INSERT OR REPLACE INTO subscriptions (user_id, expire_date) VALUES (?, ?)",
+        "INSERT OR REPLACE INTO subscriptions(user_id, tariff_name, expire_date)
+ VALUES (?, ?)",
         (user_id, None)
     )
     conn.commit()
